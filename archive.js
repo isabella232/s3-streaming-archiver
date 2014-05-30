@@ -13,6 +13,10 @@ var targetClient = knox.createClient({
 
 async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
 
+  // TODO check updated_at timestamp for most recent item in bucket.
+  // compare against timestamp on archive in targetBucket. if existing
+  // archive is newer than source bucket files, dont do anything!
+
   var sourceClient = knox.createClient({
     key: process.env.S3_ACCESS_KEY_ID,
     secret: process.env.S3_SECRET_KEY,
@@ -35,9 +39,11 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
     var upload = new mpu({
       client: targetClient,
       objectName: bucket + '-archive.tar',
-      stream: tarStream
+      stream: tarStream,
+      maxRetries: 4
     }, function(err, body) {
       console.log("Upload callback", err, body);
+      bucketListCallback();
     });
     upload.on('uploading', console.log);
     upload.on('uploaded', console.log);
@@ -45,7 +51,6 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
     upload.on('initiated', console.log);
     upload.on('completed', function(a) {
       console.log("Completed Upload ", a);
-      bucketListCallback();
     });
 
     // for testing:
@@ -57,7 +62,8 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
     }, 1);
 
     var downloadQueue = async.queue(function(key, callback) {
-      process.stdout.write(key + " .:. ");
+      // process.stdout.write(key + " .:. ");
+      process.stdout.write(".");
       sourceClient.getFile(key, function(err, res) {
         if (err) {
           console.log("client.getFile Error on ", key, err);
