@@ -43,7 +43,10 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
     upload.on('uploaded', console.log);
     upload.on('error', console.log);
     upload.on('initiated', console.log);
-    upload.on('completed', console.log);
+    upload.on('completed', function(a) {
+      console.log("Completed Upload ", a);
+      bucketListCallback();
+    });
 
     // for testing:
     // keys = keys.slice(1, 1000);
@@ -73,7 +76,6 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
       if (tarStreamQueue.idle() && downloadQueue.idle()) {
         console.log("Finalizing tarStream");
         tarStream.finalize();
-        bucketListCallback();
       }
     };
 
