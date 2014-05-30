@@ -4,27 +4,28 @@ var s3lister = require("s3-lister");
 var async = require("async");
 var archiver = require("archiver");
 
-// TODO make this happen in series. forEach will end up
-// spinning up the bucket callbacks in parallel and will
-// likely consume too much memory
+var sourceBucketList = process.env.S3_SOURCE_BUCKET.split(",");
+var targetClient = knox.createClient({
+  key: process.env.S3_ACCESS_KEY_ID,
+  secret: process.env.S3_SECRET_KEY,
+  bucket: process.env.S3_TARGET_BUCKET
+});
 
-var bucketList = process.env.S3_BUCKET.split(",");
+async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
 
-bucketList.forEach(function(bucket) {
-
-  var client = knox.createClient({
+  var sourceClient = knox.createClient({
     key: process.env.S3_ACCESS_KEY_ID,
     secret: process.env.S3_SECRET_KEY,
     bucket: bucket
   });
 
-  var listerOptions = {};
-  // listerOptions.prefix = "departments";
-  var lister = new s3lister(client, listerOptions);
+  var lister = new s3lister(sourceClient);
   var keys = [];
 
   lister.on('data', function(data) {
-    keys.push(data.Key);
+    if (data.Key.indexOf(".tar") === -1) {
+      keys.push(data.Key);
+    }
   });
 
   lister.on('end', function() {
@@ -32,8 +33,8 @@ bucketList.forEach(function(bucket) {
 
     var tarStream = archiver('tar');
     var upload = new mpu({
-      client: client,
-      objectName: 'archive.tar',
+      client: targetClient,
+      objectName: bucket + '-archive.tar',
       stream: tarStream
     }, function(err, body) {
       console.log("Upload callback", err, body);
@@ -54,7 +55,7 @@ bucketList.forEach(function(bucket) {
 
     var downloadQueue = async.queue(function(key, callback) {
       process.stdout.write(key + " .:. ");
-      client.getFile(key, function(err, res) {
+      sourceClient.getFile(key, function(err, res) {
         if (err) {
           console.log("client.getFile Error on ", key, err);
           downloadQueue.push(key); // try again
@@ -72,6 +73,7 @@ bucketList.forEach(function(bucket) {
       if (tarStreamQueue.idle() && downloadQueue.idle()) {
         console.log("Finalizing tarStream");
         tarStream.finalize();
+        bucketListCallback();
       }
     };
 
