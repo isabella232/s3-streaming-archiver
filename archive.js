@@ -1,5 +1,6 @@
 var knox = require("knox");
-var mpu = require("knox-mpu");
+// var mpu = require("knox-mpu");
+var mpu = require("./knox-mpu/index.js");
 var s3lister = require("s3-lister");
 var async = require("async");
 var archiver = require("archiver");
@@ -21,7 +22,7 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
   targetClient.headFile(archiveFileName, function(err, res) {
     if (err) {
       console.log(err);
-      archiveFileUpdatedAt = moment().subtract('days', 365);
+      archiveNeedsUpdate = true;
     } else {
       console.log(archiveFileName, "was last created on", res.headers['last-modified']);
       archiveFileUpdatedAt = Date.parse(res.headers['last-modified']);
@@ -39,7 +40,7 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
 
   lister.on('data', function(data) {
     if (!archiveNeedsUpdate) {
-      if (moment(Date.parse(data.LastModified)).isAfter(archiveFileUpdatedAt)) {
+      if (archiveFileUpdatedAt && moment(Date.parse(data.LastModified)).isAfter(archiveFileUpdatedAt)) {
         archiveNeedsUpdate = true;
       }
     }
@@ -60,16 +61,20 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
         stream: tarStream,
         maxRetries: 4
       }, function(err, body) {
-        console.log("Upload callback", err, body);
+        if (err) {
+          console.log("Failed to complete upload", err);
+        } else {
+          console.log("Completed Upload", body);
+        }
         bucketListCallback();
       });
-      upload.on('uploading', function(number) { console.log("Starting to upload part number", number); });
-      // upload.on('uploaded', console.log);
+      upload.on('uploading', function(number) { console.log("\n", "--> Starting part", number); });
       upload.on('error', console.log);
+      // upload.on('uploaded', console.log);
       // upload.on('initiated', console.log);
-      upload.on('completed', function(a) {
-        console.log("Completed Upload ", a);
-      });
+      // upload.on('completed', function(a) {
+      //   console.log("Completed Upload ", a);
+      // });
 
       // for testing:
       // keys = keys.slice(1, 1000);
@@ -77,22 +82,28 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
       var tarStreamQueue = async.queue(function(fileObject, callback) {
         tarStream.append(fileObject.stream, { name: fileObject.name });
         callback();
-      }, 1);
+      }, 3);
 
       var downloadQueue = async.queue(function(key, callback) {
-        // process.stdout.write(key + " .:. ");
-        process.stdout.write(".");
-        sourceClient.getFile(key, function(err, res) {
-          if (err) {
-            console.log("client.getFile Error on ", key, err);
-            downloadQueue.push(key); // try again
-            callback();
-          } else {
-            tarStreamQueue.push({ stream: res, name: key } );
-            res.on("end", callback);
-          }
-        });
-      }, 20);
+        try {
+          process.stdout.write(".");
+          sourceClient.getFile(key, function(err, res) {
+            if (err) {
+              console.log("client.getFile Error on ", key, err);
+              downloadQueue.push(key); // try again
+              callback();
+            } else {
+              tarStreamQueue.push({ stream: res, name: key } );
+              res.setTimeout(0);
+              res.on("end", callback);
+            }
+          });
+        } catch (e) {
+          console.log("===> Error caught in the downloadQueue worker", e);
+          downloadQueue.push(key); // try again
+          callback();
+        }
+      }, 3);
 
       downloadQueue.push(keys);
 
@@ -107,7 +118,7 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
       downloadQueue.drain = finalizeTarStream;
 
     } else {
-      console.log("==> Looks like all files are older than the archive. Skipping.");
+      console.log("==> Looks like all", keys.length, "files are older than the archive. Skipping.");
       bucketListCallback();
     }
   });
