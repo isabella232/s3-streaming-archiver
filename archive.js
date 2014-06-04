@@ -1,6 +1,6 @@
 var knox = require("knox");
 // var mpu = require("knox-mpu");
-var mpu = require("./knox-mpu/index.js");
+var mpu = require("knox-mpu/index.js");
 var s3lister = require("s3-lister");
 var async = require("async");
 var archiver = require("archiver");
