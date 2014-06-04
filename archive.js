@@ -63,10 +63,10 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
         console.log("Upload callback", err, body);
         bucketListCallback();
       });
-      upload.on('uploading', console.log);
-      upload.on('uploaded', console.log);
+      upload.on('uploading', function(number) { console.log("Starting to upload part number", number); });
+      // upload.on('uploaded', console.log);
       upload.on('error', console.log);
-      upload.on('initiated', console.log);
+      // upload.on('initiated', console.log);
       upload.on('completed', function(a) {
         console.log("Completed Upload ", a);
       });
