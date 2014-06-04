@@ -39,7 +39,7 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
 
   lister.on('data', function(data) {
     if (!archiveNeedsUpdate) {
-      if (moment(Date.parse(data['last-modified'])).isAfter(archiveFileUpdatedAt)) {
+      if (moment(Date.parse(data.LastModified)).isAfter(archiveFileUpdatedAt)) {
         archiveNeedsUpdate = true;
       }
     }
