@@ -1,6 +1,5 @@
 var knox = require("knox");
-// var mpu = require("knox-mpu");
-var mpu = require("knox-mpu/index.js");
+var mpu = require("knox-mpu");
 var s3lister = require("s3-lister");
 var async = require("async");
 var archiver = require("archiver");
@@ -79,42 +78,33 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
       // for testing:
       // keys = keys.slice(1, 1000);
 
-      var tarStreamQueue = async.queue(function(fileObject, callback) {
-        tarStream.append(fileObject.stream, { name: fileObject.name });
-        callback();
-      }, 3);
-
       var downloadQueue = async.queue(function(key, callback) {
-        try {
-          process.stdout.write(".");
-          sourceClient.getFile(key, function(err, res) {
-            if (err) {
-              console.log("client.getFile Error on ", key, err);
-              downloadQueue.push(key); // try again
-              callback();
-            } else {
-              tarStreamQueue.push({ stream: res, name: key } );
-              res.setTimeout(0);
-              res.on("end", callback);
-            }
-          });
-        } catch (e) {
-          console.log("===> Error caught in the downloadQueue worker", e);
-          downloadQueue.push(key); // try again
-          callback();
-        }
-      }, 3);
+        process.stdout.write(".");
+        sourceClient.getFile(key, function(err, res) {
+          if (err) {
+            console.log("client.getFile Error on", key, err.code);
+            downloadQueue.unshift(key); // try again
+            callback(err);
+          } else {
+            tarStream.append(res, { name: key });
+            res.on("end", callback);
+          }
+        }).on('error', function(err) {
+          console.log("client.getFile Error Event on", key, err.code); 
+          downloadQueue.unshift(key); // try again
+          // callback(); // already got called on 'end'. so weird.
+        });
+      }, 10);
 
       downloadQueue.push(keys);
 
       var finalizeTarStream = function() {
-        if (tarStreamQueue.idle() && downloadQueue.idle()) {
+        if (downloadQueue.idle()) {
           console.log("Finalizing tarStream");
           tarStream.finalize();
         }
       };
 
-      tarStreamQueue.drain = finalizeTarStream;
       downloadQueue.drain = finalizeTarStream;
 
     } else {
