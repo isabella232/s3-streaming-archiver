@@ -90,7 +90,7 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
             res.on("end", callback);
           }
         }).on('error', function(err) {
-          console.log("client.getFile Error Event on", key, err.code); 
+          console.log("client.getFile Error Event on", key, err.code);
           downloadQueue.unshift(key); // try again
           // callback(); // already got called on 'end'. so weird.
         });
