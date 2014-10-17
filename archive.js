@@ -46,7 +46,7 @@ async.eachSeries(sourceBucketList, function(bucket, bucketListCallback) {
     if (data.Key.indexOf("nutshell") !== 0) {
       keys.push(data.Key);
     } else {
-      console.log("skipping", data.key);
+      console.log("skipping", data.Key);
     }
   });
 
